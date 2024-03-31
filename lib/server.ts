@@ -15,6 +15,7 @@ import type {
 import type { CookieSerializeOptions } from "cookie";
 import type { CorsOptions, CorsOptionsDelegate } from "cors";
 import type { Duplex } from "stream";
+import type { Transport as TransportImpl } from './transports'
 import { WebTransport } from "./transports/webtransport";
 import { createPacketDecoderStream } from "engine.io-parser";
 
@@ -23,6 +24,13 @@ const debug = debugModule("engine");
 const kResponseHeaders = Symbol("responseHeaders");
 
 type Transport = "polling" | "websocket";
+
+/**
+ * URL search can contain string[] but we only support string
+ */
+export type PreparedIncomingMessage = IncomingMessage & {_query?: Record<string, string>};
+
+type ErrorCallback = (errorCode?: number, errorContext?: Record<string, unknown>) => void
 
 export interface AttachOptions {
   /**
@@ -247,7 +255,7 @@ export abstract class BaseServer extends EventEmitter {
    * @return {Array}
    * @api public
    */
-  public upgrades(transport) {
+  public upgrades(transport: keyof typeof transports) {
     if (!this.opts.allowUpgrades) return [];
     return transports[transport].upgradesTo || [];
   }
@@ -255,16 +263,17 @@ export abstract class BaseServer extends EventEmitter {
   /**
    * Verifies a request.
    *
-   * @param {http.IncomingMessage}
-   * @return {Boolean} whether the request is valid
+   * @param {IncomingMessage}
+   * @param fn callback
+   * @return whether the request is valid
    * @api private
    */
-  protected verify(req, upgrade, fn) {
+  protected verify(req: PreparedIncomingMessage, upgrade: boolean, fn: ErrorCallback): void | boolean {
     // transport check
     const transport = req._query.transport;
     // WebTransport does not go through the verify() method, see the onWebTransportSession() method
     if (
-      !~this.opts.transports.indexOf(transport) ||
+      !~this.opts.transports.indexOf(transport as Transport) ||
       transport === "webtransport"
     ) {
       debug('unknown transport "%s"', transport);
@@ -292,7 +301,7 @@ export abstract class BaseServer extends EventEmitter {
           sid,
         });
       }
-      const previousTransport = this.clients[sid].transport.name;
+      const previousTransport = this.clients[sid as string].transport.name;
       if (!upgrade && previousTransport !== transport) {
         debug("bad request: unexpected transport without upgrade");
         return fn(Server.errors.BAD_REQUEST, {
@@ -406,7 +415,7 @@ export abstract class BaseServer extends EventEmitter {
    * @param {Object} request object
    * @api public
    */
-  public generateId(req) {
+  public generateId(req: IncomingMessage): string | PromiseLike<string> {
     return base64id.generateId();
   }
 
@@ -419,7 +428,7 @@ export abstract class BaseServer extends EventEmitter {
    *
    * @api protected
    */
-  protected async handshake(transportName, req, closeConnection) {
+  protected async handshake(transportName: string, req: PreparedIncomingMessage, closeConnection: ErrorCallback) {
     const protocol = req._query.EIO === "4" ? 4 : 3; // 3rd revision by default
     if (protocol === 3 && !this.opts.allowEIO3) {
       debug("unsupported protocol version");
@@ -456,8 +465,9 @@ export abstract class BaseServer extends EventEmitter {
 
     debug('handshaking client "%s"', id);
 
+    let transport: TransportImpl;
     try {
-      var transport = this.createTransport(transportName, req);
+      transport = this.createTransport(transportName, req);
       if ("polling" === transportName) {
         transport.maxHttpBufferSize = this.opts.maxHttpBufferSize;
         transport.httpCompression = this.opts.httpCompression;
@@ -594,7 +604,7 @@ export abstract class BaseServer extends EventEmitter {
     }
   }
 
-  protected abstract createTransport(transportName, req);
+  protected abstract createTransport(transportName, req): TransportImpl;
 
   /**
    * Protocol errors mappings.
@@ -709,14 +719,14 @@ export class Server extends BaseServer {
    *
    * @api private
    */
-  private prepare(req) {
+  private prepare(req: PreparedIncomingMessage) {
     // try to leverage pre-existing `req._query` (e.g: from connect)
     if (!req._query) {
-      req._query = ~req.url.indexOf("?") ? qs.parse(parse(req.url).query) : {};
+      req._query = ~req.url.indexOf("?") ? qs.parse(parse(req.url).query) as Record<string, string> : {};
     }
   }
 
-  protected createTransport(transportName, req) {
+  protected createTransport(transportName: keyof typeof transports, req: PreparedIncomingMessage) {
     return new transports[transportName](req);
   }
 
@@ -733,7 +743,7 @@ export class Server extends BaseServer {
     // @ts-ignore
     req.res = res;
 
-    const callback = (errorCode, errorContext) => {
+    const callback: ErrorCallback = (errorCode, errorContext) => {
       if (errorCode !== undefined) {
         this.emit("connection_error", {
           req,
