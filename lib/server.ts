@@ -617,7 +617,7 @@ export abstract class BaseServer extends EventEmitter {
     BAD_REQUEST: 3,
     FORBIDDEN: 4,
     UNSUPPORTED_PROTOCOL_VERSION: 5,
-  };
+  } as const;
 
   static errorMessages = {
     0: "Transport unknown",
@@ -626,7 +626,7 @@ export abstract class BaseServer extends EventEmitter {
     3: "Bad request",
     4: "Forbidden",
     5: "Unsupported protocol version",
-  };
+  } as const;
 }
 
 /**
@@ -790,7 +790,7 @@ export class Server extends BaseServer {
     this.prepare(req);
 
     const res = new WebSocketResponse(req, socket);
-    const callback = (errorCode, errorContext) => {
+    const callback = (errorCode: keyof typeof Server.errorMessages, errorContext: unknown) => {
       if (errorCode !== undefined) {
         this.emit("connection_error", {
           req,
