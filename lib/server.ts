@@ -156,7 +156,7 @@ type Middleware = (
   next: (err?: any) => void
 ) => void;
 
-function parseSessionId(data: string) {
+function parseSessionId(data: string): string | undefined {
   try {
     const parsed = JSON.parse(data);
     if (typeof parsed.sid === "string") {
@@ -168,7 +168,7 @@ function parseSessionId(data: string) {
 export abstract class BaseServer extends EventEmitter {
   public opts: ServerOptions;
 
-  protected clients: any;
+  protected clients: Record<string, Socket>;
   public clientsCount: number;
   protected middlewares: Middleware[] = [];
 
@@ -892,7 +892,7 @@ export class Server extends BaseServer {
     const path = this._computePath(options);
     const destroyUpgradeTimeout = options.destroyUpgradeTimeout || 1000;
 
-    function check(req) {
+    function check(req: IncomingMessage) {
       // TODO use `path === new URL(...).pathname` in the next major release (ref: https://nodejs.org/api/url.html)
       return path === req.url.slice(0, path.length);
     }
@@ -951,7 +951,7 @@ export class Server extends BaseServer {
  * @api private
  */
 
-function abortRequest(res, errorCode, errorContext) {
+function abortRequest(res: ServerResponse, errorCode: number, errorContext?: {message?: string}) {
   const statusCode = errorCode === Server.errors.FORBIDDEN ? 403 : 400;
   const message =
     errorContext && errorContext.message
@@ -1036,7 +1036,7 @@ const validHdrChars = [
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1  // ... 255
 ]
 
-function checkInvalidHeaderChar(val) {
+function checkInvalidHeaderChar(val: string) {
   val += "";
   if (val.length < 1) return false;
   if (!validHdrChars[val.charCodeAt(0)]) {
