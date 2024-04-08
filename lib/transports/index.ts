@@ -4,13 +4,19 @@ import { WebSocket } from "./websocket";
 import { WebTransport } from "./webtransport";
 import type { PreparedIncomingMessage } from "../server";
 
+export { Polling as XHR } from "./polling";
+export { JSONP } from "./polling-jsonp";
+export type {WebSocket, WebTransport};
+
+export type TransportImpl = WebSocket | WebTransport | XHR | JSONP
+
 export default {
   polling: polling as unknown as TransportConstructor,
   websocket: WebSocket as TransportConstructor,
   webtransport: WebTransport as TransportConstructor
 };
 
-interface TransportConstructor {
+export interface TransportConstructor {
   new (req: PreparedIncomingMessage, ...more: any[]):
     | WebSocket
     | WebTransport

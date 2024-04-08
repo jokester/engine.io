@@ -15,7 +15,8 @@ import type {
 import type { CookieSerializeOptions } from "cookie";
 import type { CorsOptions, CorsOptionsDelegate } from "cors";
 import type { Duplex } from "stream";
-import type { Transport as TransportImpl } from './transports'
+import type { default as TransportImpl } from './transports'
+import type * as T from './transports'
 import { WebTransport } from "./transports/webtransport";
 import { createPacketDecoderStream } from "engine.io-parser";
 
@@ -345,6 +346,8 @@ export abstract class BaseServer extends EventEmitter {
    *
    * @example
    * import helmet from "helmet";
+import { Polling } from './transports-uws/polling';
+import { WebSocket } from './transports-uws/websocket';
    *
    * engine.use(helmet());
    *
@@ -465,14 +468,14 @@ export abstract class BaseServer extends EventEmitter {
 
     debug('handshaking client "%s"', id);
 
-    let transport: TransportImpl;
+    let transport: T.TransportImpl;
     try {
       transport = this.createTransport(transportName, req);
       if ("polling" === transportName) {
-        transport.maxHttpBufferSize = this.opts.maxHttpBufferSize;
-        transport.httpCompression = this.opts.httpCompression;
+        (transport as T.XHR).maxHttpBufferSize = this.opts.maxHttpBufferSize;
+        (transport as T.XHR).httpCompression = this.opts.httpCompression;
       } else if ("websocket" === transportName) {
-        transport.perMessageDeflate = this.opts.perMessageDeflate;
+        (transport as T.WebSocket).perMessageDeflate = this.opts.perMessageDeflate;
       }
     } catch (e) {
       debug('error handshaking to transport "%s"', transportName);
@@ -604,7 +607,7 @@ export abstract class BaseServer extends EventEmitter {
     }
   }
 
-  protected abstract createTransport(transportName, req): TransportImpl;
+  protected abstract createTransport(transportName, req): T.TransportImpl;
 
   /**
    * Protocol errors mappings.
@@ -726,8 +729,8 @@ export class Server extends BaseServer {
     }
   }
 
-  protected createTransport(transportName: keyof typeof transports, req: PreparedIncomingMessage) {
-    return new transports[transportName](req);
+  protected createTransport(transportName: keyof typeof transports, req: PreparedIncomingMessage): T.TransportImpl {
+    return new transports[transportName](req) as T.TransportImpl
   }
 
   /**
