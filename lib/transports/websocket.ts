@@ -4,7 +4,7 @@ import debugModule from "debug";
 const debug = debugModule("engine:ws");
 
 export class WebSocket extends Transport {
-  protected perMessageDeflate: any;
+  perMessageDeflate: any;
   private socket: any;
 
   /**

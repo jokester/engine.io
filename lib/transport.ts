@@ -70,7 +70,7 @@ export abstract class Transport extends EventEmitter {
    * @param {http.IncomingMessage} req
    * @api protected
    */
-  protected onRequest(req) {
+  onRequest(req) {
     debug("setting request");
     this.req = req;
   }

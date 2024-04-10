@@ -24,8 +24,8 @@ export class Socket extends EventEmitter {
   public transport: Transport;
 
   private server: Server;
-  private upgrading = false;
-  private upgraded = false;
+  upgrading = false;
+  upgraded = false;
   private writeBuffer: Packet[] = [];
   private packetsFn: Array<() => void> = [];
   private sentCallbackFn: any[] = [];

@@ -425,8 +425,8 @@ import { WebSocket } from './transports-uws/websocket';
   /**
    * Handshakes a new client.
    *
-   * @param {String} transport name
-   * @param {Object} request object
+   * @param {String} transportName name
+   * @param {Object} req object
    * @param {Function} closeConnection
    *
    * @api protected
