@@ -2,7 +2,7 @@ import { EventEmitter } from "events";
 import debugModule from "debug";
 import { IncomingMessage } from "http";
 import { Transport } from "./transport";
-import { Server } from "./server";
+import type { BaseServer as Server } from "./server";
 import { setTimeout, clearTimeout } from "timers";
 import { Packet, PacketType, RawData } from "engine.io-parser";
 

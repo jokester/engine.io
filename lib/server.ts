@@ -232,7 +232,7 @@ export abstract class BaseServer extends EventEmitter {
     this.init();
   }
 
-  protected abstract init();
+  protected abstract init(): void;
 
   /**
    * Compute the pathname of the requests that are handled by the server

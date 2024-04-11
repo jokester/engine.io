@@ -5,7 +5,7 @@
   "type": "commonjs",
   "main": "./build/engine.io.js",
   "types": "./build/engine.io.d.ts",
-  "exports": {
+  "$exports": {
     "types": "./build/engine.io.d.ts",
     "import": "./wrapper.mjs",
     "require": "./build/engine.io.js"
