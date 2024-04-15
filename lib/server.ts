@@ -121,7 +121,7 @@ export interface ServerOptions {
    *
    * @default `require("ws").Server`
    */
-  wsEngine?: any;
+  wsEngine?: typeof import('ws').Server;
   /**
    * an optional packet which will be concatenated to the handshake packet emitted by Engine.IO.
    */
@@ -668,7 +668,7 @@ class WebSocketResponse {
 
 export class Server extends BaseServer {
   public httpServer?: HttpServer;
-  private ws: any;
+  private ws: import('ws').Server;
 
   /**
    * Initialize websocket server
