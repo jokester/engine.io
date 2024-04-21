@@ -6,7 +6,7 @@ import { EventEmitter } from "events";
 import { Socket } from "./socket";
 import debugModule from "debug";
 import { serialize } from "cookie";
-import { Server as DEFAULT_WS_ENGINE } from "ws";
+// import { Server as DEFAULT_WS_ENGINE } from "ws";
 import type {
   IncomingMessage,
   Server as HttpServer,
@@ -26,12 +26,20 @@ const kResponseHeaders = Symbol("responseHeaders");
 
 type Transport = "polling" | "websocket";
 
+class DEFAULT_WS_ENGINE {}
+
 /**
  * URL search can contain string[] but we only support string
  */
-export type PreparedIncomingMessage = IncomingMessage & {_query?: Record<string, string>};
+export type PreparedIncomingMessage = Partial<IncomingMessage> & {
+  _query?: Record<string, string>;
+  websocket: unknown;
+};
 
-type ErrorCallback = (errorCode?: number, errorContext?: Record<string, unknown>) => void
+type ErrorCallback = (
+  errorCode?: typeof Server.errors[keyof typeof Server.errors],
+  errorContext?: Record<string, unknown>
+) => void;
 
 export interface AttachOptions {
   /**
@@ -423,7 +431,7 @@ import { WebSocket } from './transports-uws/websocket';
   }
 
   /**
-   * Handshakes a new client.
+   * Handshakes a new client. create new sessionId / Socket / more
    *
    * @param {String} transportName name
    * @param {Object} req object
@@ -722,7 +730,10 @@ export class Server extends BaseServer {
    *
    * @api private
    */
-  private prepare(req: PreparedIncomingMessage) {
+  private prepare(
+    req: IncomingMessage & Partial<PreparedIncomingMessage>
+    // @ts-ignore-
+  ): asserts req is PreparedIncomingMessage {
     // try to leverage pre-existing `req._query` (e.g: from connect)
     if (!req._query) {
       req._query = ~req.url.indexOf("?") ? qs.parse(parse(req.url).query) as Record<string, string> : {};
@@ -793,7 +804,7 @@ export class Server extends BaseServer {
     this.prepare(req);
 
     const res = new WebSocketResponse(req, socket);
-    const callback = (errorCode: keyof typeof Server.errorMessages, errorContext: unknown) => {
+    const callback: ErrorCallback = (errorCode, errorContext) => {
       if (errorCode !== undefined) {
         this.emit("connection_error", {
           req,
@@ -869,7 +880,9 @@ export class Server extends BaseServer {
         websocket.removeListener("error", onUpgradeError);
 
         const transport = this.createTransport(req._query.transport, req);
+        // @ts-expect-error this option is only for WebSocket impl
         transport.perMessageDeflate = this.opts.perMessageDeflate;
+        // @ts-expect-error
         client.maybeUpgrade(transport);
       }
     } else {
