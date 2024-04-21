@@ -1,19 +1,31 @@
 import { Transport } from "../transport";
 import debugModule from "debug";
+import type {EventEmitter} from 'node:events';
 
 const debug = debugModule("engine:ws");
 
+/**
+ * names started with _ are not in web-WebSocket standard
+ */
+export interface DomWebSocket extends EventEmitter {
+  send(data: string | Buffer, _opts?: unknown, _callback?: unknown): void;
+  _sender?: any;
+  close(): void;
+}
+
 export class WebSocket extends Transport {
-  perMessageDeflate: any;
-  private socket: any;
+  perMessageDeflate: {
+    threshold: number;
+  };
+  private socket: DomWebSocket;
 
   /**
    * WebSocket transport
    *
-   * @param {http.IncomingMessage}
+   * @param req
    * @api public
    */
-  constructor(req) {
+  constructor(req: {websocket: DomWebSocket}) {
     super(req);
     this.socket = req.websocket;
     this.socket.on("message", (data, isBinary) => {
