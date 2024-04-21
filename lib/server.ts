@@ -15,7 +15,6 @@ import type {
 import type { CookieSerializeOptions } from "cookie";
 import type { CorsOptions, CorsOptionsDelegate } from "cors";
 import type { Duplex } from "stream";
-import type { default as TransportImpl } from './transports'
 import type * as T from './transports'
 import { WebTransport } from "./transports/webtransport";
 import { createPacketDecoderStream } from "engine.io-parser";
@@ -31,14 +30,14 @@ class DEFAULT_WS_ENGINE {}
 /**
  * URL search can contain string[] but we only support string
  */
-export type PreparedIncomingMessage = Partial<IncomingMessage> & {
+export type PreparedIncomingMessage = IncomingMessage & {
   _query?: Record<string, string>;
   websocket: unknown;
 };
 
-type ErrorCallback = (
+export type ErrorCallback = (
   errorCode?: typeof Server.errors[keyof typeof Server.errors],
-  errorContext?: Record<string, unknown>
+  errorContext?: Record<string, unknown> & {name?: string, message?: string}
 ) => void;
 
 export interface AttachOptions {
@@ -460,7 +459,7 @@ import { WebSocket } from './transports-uws/websocket';
     try {
       id = await this.generateId(req);
     } catch (e) {
-      debug("error while generating an id");
+      debug("error while generating an id", e);
       this.emit("connection_error", {
         req,
         code: Server.errors.BAD_REQUEST,
@@ -486,7 +485,7 @@ import { WebSocket } from './transports-uws/websocket';
         (transport as T.WebSocket).perMessageDeflate = this.opts.perMessageDeflate;
       }
     } catch (e) {
-      debug('error handshaking to transport "%s"', transportName);
+      debug('error handshaking to transport "%s"', transportName, e);
       this.emit("connection_error", {
         req,
         code: Server.errors.BAD_REQUEST,
