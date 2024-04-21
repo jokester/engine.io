@@ -1,6 +1,6 @@
 import { Transport } from "../transport";
 import { createGzip, createDeflate } from "zlib";
-import * as accepts from "accepts";
+import accepts from "accepts";
 import debugModule from "debug";
 import { IncomingMessage, ServerResponse } from "http";
 
