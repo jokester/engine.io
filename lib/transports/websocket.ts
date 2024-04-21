@@ -1,14 +1,19 @@
-import { Transport } from "../transport";
-import debugModule from "debug";
+import {Transport} from '../transport';
+import debugModule from 'debug';
 import type {EventEmitter} from 'node:events';
 
-const debug = debugModule("engine:ws");
+const debug = debugModule('engine:ws');
 
 /**
+ * ws-like WebSocket object
  * names started with _ are not in web-WebSocket standard
  */
-export interface DomWebSocket extends EventEmitter {
-  send(data: string | Buffer, _opts?: unknown, _callback?: unknown): void;
+export interface WsWebSocket extends EventEmitter {
+  send(
+    data: string | Buffer,
+    _opts?: unknown,
+    _callback?: (err?: Error) => void
+  ): void;
   _sender?: any;
   close(): void;
 }
@@ -17,7 +22,7 @@ export class WebSocket extends Transport {
   perMessageDeflate: {
     threshold: number;
   };
-  private socket: DomWebSocket;
+  private socket: WsWebSocket;
 
   /**
    * WebSocket transport
@@ -25,7 +30,7 @@ export class WebSocket extends Transport {
    * @param req
    * @api public
    */
-  constructor(req: {websocket: DomWebSocket}) {
+  constructor(req: {websocket: WsWebSocket}) {
     super(req);
     this.socket = req.websocket;
     this.socket.on("message", (data, isBinary) => {
