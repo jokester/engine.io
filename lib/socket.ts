@@ -215,10 +215,10 @@ export class Socket extends EventEmitter {
   /**
    * Attaches handlers for the given transport.
    *
-   * @param {Transport} transport
+   * @param transport
    * @api private
    */
-  private setTransport(transport) {
+  private setTransport(transport: Transport): void {
     const onError = this.onError.bind(this);
     const onPacket = this.onPacket.bind(this);
     const flush = this.flush.bind(this);
