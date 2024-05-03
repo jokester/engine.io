@@ -6,7 +6,7 @@ import { EventEmitter } from "events";
 import { Socket } from "./socket";
 import debugModule from "debug";
 import { serialize } from "cookie";
-// import { Server as DEFAULT_WS_ENGINE } from "ws";
+import { Server as DEFAULT_WS_ENGINE } from "ws";
 import type {
   IncomingMessage,
   Server as HttpServer,
@@ -24,8 +24,6 @@ const debug = debugModule("engine");
 const kResponseHeaders = Symbol("responseHeaders");
 
 type Transport = "polling" | "websocket";
-
-class DEFAULT_WS_ENGINE {}
 
 /**
  * URL search can contain string[] but we only support string
