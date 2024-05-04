@@ -4,7 +4,7 @@ import { IncomingMessage } from "http";
 import { Transport } from "./transport";
 import type { BaseServer as Server } from "./server";
 import { setTimeout, clearTimeout } from "timers";
-import { Packet, PacketType, RawData } from "engine.io-parser";
+import type { Packet, PacketType, RawData } from "engine.io-parser/lib";
 
 const debug = debugModule("engine:socket");
 

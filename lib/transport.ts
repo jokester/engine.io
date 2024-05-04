@@ -1,9 +1,9 @@
 import { EventEmitter } from "events";
-import * as parser_v4 from "engine.io-parser";
+import * as parser_v4 from "engine.io-parser/lib";
 import * as parser_v3 from "./parser-v3/index";
 import debugModule from "debug";
 import { IncomingMessage } from "http";
-import { Packet } from "engine.io-parser";
+import { Packet } from "engine.io-parser/lib";
 
 const debug = debugModule("engine:transport");
 
@@ -24,8 +24,13 @@ export abstract class Transport extends EventEmitter {
 
   protected _readyState: ReadyState = "open";
   protected discarded = false;
-  protected parser: any;
+  protected parser: typeof import('engine.io-parser/lib');
   protected req: IncomingMessage & { cleanup: Function };
+  /**
+   * defaults to be true
+   * FIXME can we use this in CF WebSockets?
+   * @protected
+   */
   protected supportsBinary: boolean;
 
   get readyState() {

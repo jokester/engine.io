@@ -1,6 +1,7 @@
 import {Transport} from '../transport';
 import debugModule from 'debug';
 import type {EventEmitter} from 'node:events';
+import type { Packet } from "engine.io-parser/lib";
 
 const debug = debugModule('engine:ws');
 
@@ -19,7 +20,7 @@ export interface WsWebSocket extends EventEmitter {
 }
 
 export class WebSocket extends Transport {
-  perMessageDeflate: {
+  perMessageDeflate: false | {
     threshold: number;
   };
   private socket: WsWebSocket;
@@ -74,10 +75,10 @@ export class WebSocket extends Transport {
   /**
    * Writes a packet payload.
    *
-   * @param {Array} packets
+   * @param packets
    * @api private
    */
-  send(packets) {
+  send(packets: Packet[]) {
     this.writable = false;
 
     for (let i = 0; i < packets.length; i++) {
@@ -118,6 +119,7 @@ export class WebSocket extends Transport {
         // see https://github.com/websockets/ws/issues/617#issuecomment-283002469
         this.socket._sender.sendFrame(packet.options.wsPreEncodedFrame, onSent);
       } else {
+        // just use this
         this.parser.encodePacket(packet, this.supportsBinary, send);
       }
     }
@@ -128,7 +130,7 @@ export class WebSocket extends Transport {
    * @param packet
    * @private
    */
-  private _canSendPreEncodedFrame(packet) {
+  private _canSendPreEncodedFrame(packet: Packet) {
     return (
       !this.perMessageDeflate &&
       typeof this.socket?._sender?.sendFrame === "function" &&

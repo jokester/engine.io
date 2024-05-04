@@ -17,7 +17,7 @@ import type { CorsOptions, CorsOptionsDelegate } from "cors";
 import type { Duplex } from "stream";
 import type * as T from './transports'
 import { WebTransport } from "./transports/webtransport";
-import { createPacketDecoderStream } from "engine.io-parser";
+import { createPacketDecoderStream } from "engine.io-parser/lib";
 
 const debug = debugModule("engine");
 
