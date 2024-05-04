@@ -1,7 +1,7 @@
 import { createServer, Server as HttpServer } from "http";
 import { Server, AttachOptions, ServerOptions } from "./server";
 import transports from "./transports/index";
-import * as parser from "engine.io-parser";
+import * as parser from "engine.io-parser/lib";
 
 export { Server, transports, listen, attach, parser };
 export type { AttachOptions, ServerOptions, BaseServer } from "./server";

@@ -1,6 +1,6 @@
 import { Transport } from "../transport";
 import debugModule from "debug";
-import { createPacketEncoderStream } from "engine.io-parser";
+import { createPacketEncoderStream } from "engine.io-parser/lib";
 
 const debug = debugModule("engine:webtransport");
 
