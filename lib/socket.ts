@@ -1,7 +1,7 @@
 import { EventEmitter } from "events";
 import debugModule from "debug";
 import { IncomingMessage } from "http";
-import { Transport } from "./transport";
+import type { Transport } from "./transport";
 import type { BaseServer as Server } from "./server";
 import { setTimeout, clearTimeout } from "timers";
 import type { Packet, PacketType, RawData } from "engine.io-parser/lib";
@@ -527,9 +527,8 @@ export class Socket extends EventEmitter {
   private getAvailableUpgrades() {
     const availableUpgrades = [];
     const allUpgrades = this.server.upgrades(this.transport.name);
-    let i = 0;
     const l = allUpgrades.length;
-    for (; i < l; ++i) {
+    for (let i=0; i < l; ++i) {
       const upg = allUpgrades[i];
       if (this.server.opts.transports.indexOf(upg) !== -1) {
         availableUpgrades.push(upg);
