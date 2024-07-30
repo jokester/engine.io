@@ -25,14 +25,6 @@ const kResponseHeaders = Symbol("responseHeaders");
 
 type Transport = "polling" | "websocket";
 
-/**
- * URL search can contain string[] but we only support string
- */
-export type PreparedIncomingMessage = IncomingMessage & {
-  _query?: Record<string, string>;
-  websocket: unknown;
-};
-
 export type ErrorCallback = (
   errorCode?: typeof Server.errors[keyof typeof Server.errors],
   errorContext?: Record<string, unknown> & {name?: string, message?: string}
@@ -174,6 +166,7 @@ function parseSessionId(data: string): string | undefined {
 export abstract class BaseServer extends EventEmitter {
   public opts: ServerOptions;
 
+  // TODO for the next major release: use a Map instead
   protected clients: Record<string, Socket>;
   public clientsCount: number;
   protected middlewares: Middleware[] = [];
@@ -182,7 +175,6 @@ export abstract class BaseServer extends EventEmitter {
    * Server constructor.
    *
    * @param {Object} opts - options
-   * @api public
    */
   constructor(opts: ServerOptions = {}) {
     super();
@@ -259,7 +251,6 @@ export abstract class BaseServer extends EventEmitter {
    * Returns a list of available transports for upgrade given a certain transport.
    *
    * @return {Array}
-   * @api public
    */
   public upgrades(transport: keyof typeof transports) {
     if (!this.opts.allowUpgrades) return [];
@@ -269,12 +260,13 @@ export abstract class BaseServer extends EventEmitter {
   /**
    * Verifies a request.
    *
-   * @param {IncomingMessage}
-   * @param fn callback
+   * @param {EngineRequest} req
+   * @param upgrade - whether it's an upgrade request
+   * @param fn
+   * @protected
    * @return whether the request is valid
-   * @api private
    */
-  protected verify(req: PreparedIncomingMessage, upgrade: boolean, fn: ErrorCallback): void | boolean {
+  protected verify(req: EngineRequest, upgrade: boolean, fn: ErrorCallback): void | boolean {
     // transport check
     const transport = req._query.transport;
     // WebTransport does not go through the verify() method, see the onWebTransportSession() method
@@ -351,8 +343,6 @@ export abstract class BaseServer extends EventEmitter {
    *
    * @example
    * import helmet from "helmet";
-import { Polling } from './transports-uws/polling';
-import { WebSocket } from './transports-uws/websocket';
    *
    * engine.use(helmet());
    *
@@ -400,8 +390,6 @@ import { WebSocket } from './transports-uws/websocket';
 
   /**
    * Closes all clients.
-   *
-   * @api public
    */
   public close() {
     debug("closing all open clients");
@@ -420,8 +408,7 @@ import { WebSocket } from './transports-uws/websocket';
    * generate a socket id.
    * Overwrite this method to generate your custom socket id
    *
-   * @param {Object} request object
-   * @api public
+   * @param {IncomingMessage} req - the request object
    */
   public generateId(req: IncomingMessage): string | PromiseLike<string> {
     return base64id.generateId();
@@ -430,11 +417,11 @@ import { WebSocket } from './transports-uws/websocket';
   /**
    * Handshakes a new client. create new sessionId / Socket / more
    *
-   * @param {String} transportName name
-   * @param {Object} req object
+   * @param {String} transportName
+   * @param {Object} req - the request object
    * @param {Function} closeConnection
    *
-   * @api protected
+   * @protected
    */
   protected async handshake(transportName: string, req: PreparedIncomingMessage, closeConnection: ErrorCallback) {
     const protocol = req._query.EIO === "4" ? 4 : 3; // 3rd revision by default
@@ -678,7 +665,7 @@ export class Server extends BaseServer {
   /**
    * Initialize websocket server
    *
-   * @api protected
+   * @protected
    */
   protected init() {
     if (!~this.opts.transports.indexOf("websocket")) return;
@@ -725,33 +712,30 @@ export class Server extends BaseServer {
   /**
    * Prepares a request by processing the query string.
    *
-   * @api private
+   * @private
    */
-  private prepare(
-    req: IncomingMessage & Partial<PreparedIncomingMessage>
-    // @ts-ignore-
-  ): asserts req is PreparedIncomingMessage {
+  private prepare(req: EngineRequest) {
     // try to leverage pre-existing `req._query` (e.g: from connect)
     if (!req._query) {
-      req._query = ~req.url.indexOf("?") ? qs.parse(parse(req.url).query) as Record<string, string> : {};
+      req._query = (
+        ~req.url.indexOf("?") ? qs.parse(parse(req.url).query) : {}
+      ) as Record<string, string>;
     }
   }
 
-  protected createTransport(transportName: keyof typeof transports, req: PreparedIncomingMessage): T.TransportImpl {
+  protected createTransport(transportName: keyof typeof transports, req: EngineRequest): T.TransportImpl {
     return new transports[transportName](req) as T.TransportImpl
   }
 
   /**
    * Handles an Engine.IO HTTP request.
    *
-   * @param {IncomingMessage} req
+   * @param {EngineRequest} req
    * @param {ServerResponse} res
-   * @api public
    */
-  public handleRequest(req: IncomingMessage, res: ServerResponse) {
+  public handleRequest(req: EngineRequest, res: ServerResponse) {
     debug('handling "%s" http request "%s"', req.method, req.url);
     this.prepare(req);
-    // @ts-ignore
     req.res = res;
 
     const callback: ErrorCallback = (errorCode, errorContext) => {
@@ -766,15 +750,12 @@ export class Server extends BaseServer {
         return;
       }
 
-      // @ts-ignore
       if (req._query.sid) {
         debug("setting new request for existing client");
-        // @ts-ignore
         this.clients[req._query.sid].transport.onRequest(req);
       } else {
         const closeConnection = (errorCode, errorContext) =>
           abortRequest(res, errorCode, errorContext);
-        // @ts-ignore
         this.handshake(req._query.transport, req, closeConnection);
       }
     };
@@ -790,11 +771,9 @@ export class Server extends BaseServer {
 
   /**
    * Handles an Engine.IO HTTP Upgrade.
-   *
-   * @api public
    */
   public handleUpgrade(
-    req: IncomingMessage,
+    req: EngineRequest,
     socket: Duplex,
     upgradeHead: Buffer
   ) {
@@ -839,7 +818,7 @@ export class Server extends BaseServer {
    * Called upon a ws.io connection.
    *
    * @param {ws.Socket} websocket
-   * @api private
+   * @private
    */
   private onWebSocket(req, socket, websocket) {
     websocket.on("error", onUpgradeError);
@@ -899,13 +878,12 @@ export class Server extends BaseServer {
    *
    * @param {http.Server} server
    * @param {Object} options
-   * @api public
    */
   public attach(server: HttpServer, options: AttachOptions = {}) {
     const path = this._computePath(options);
     const destroyUpgradeTimeout = options.destroyUpgradeTimeout || 1000;
 
-    function check(req: IncomingMessage) {
+    function check(req) {
       // TODO use `path === new URL(...).pathname` in the next major release (ref: https://nodejs.org/api/url.html)
       return path === req.url.slice(0, path.length);
     }
@@ -920,7 +898,7 @@ export class Server extends BaseServer {
     server.on("request", (req, res) => {
       if (check(req)) {
         debug('intercepting request for path "%s"', path);
-        this.handleRequest(req, res);
+        this.handleRequest(req as EngineRequest, res);
       } else {
         let i = 0;
         const l = listeners.length;
@@ -933,7 +911,7 @@ export class Server extends BaseServer {
     if (~this.opts.transports.indexOf("websocket")) {
       server.on("upgrade", (req, socket, head) => {
         if (check(req)) {
-          this.handleUpgrade(req, socket, head);
+          this.handleUpgrade(req as EngineRequest, socket, head);
         } else if (false !== options.destroyUpgrade) {
           // default node behavior is to disconnect when no handlers
           // but by adding a handler, we prevent that
@@ -961,7 +939,7 @@ export class Server extends BaseServer {
  * @param errorCode - the error code
  * @param errorContext - additional error context
  *
- * @api private
+ * @private
  */
 
 function abortRequest(res: ServerResponse, errorCode: number, errorContext?: {message?: string}) {
@@ -986,7 +964,6 @@ function abortRequest(res: ServerResponse, errorCode: number, errorContext?: {me
  * @param {net.Socket} socket
  * @param {string} errorCode - the error code
  * @param {object} errorContext - additional error context
- *
  * @api private
  */
 

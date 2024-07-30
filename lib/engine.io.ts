@@ -1,7 +1,7 @@
 import { createServer, Server as HttpServer } from "http";
 import { Server, AttachOptions, ServerOptions } from "./server";
 import transports from "./transports/index";
-import * as parser from "engine.io-parser/lib";
+import * as parser from "engine.io-parser";
 
 export { Server, transports, listen, attach, parser };
 export type { AttachOptions, ServerOptions, BaseServer } from "./server";
@@ -17,7 +17,6 @@ export const protocol = parser.protocol;
  * @param options
  * @param listeningListener passed to http.Server.listen()
  * @return engine.io server
- * @api public
  */
 
 function listen(port: number, options?: AttachOptions & ServerOptions, listeningListener?: () => void): Server {
