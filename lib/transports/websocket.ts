@@ -6,7 +6,7 @@ import type { Packet } from "engine.io-parser/lib";
 const debug = debugModule('engine:ws');
 
 /**
- * ws-like WebSocket object
+ * WebSocket object in 'ws' package
  * names started with _ are not in web-WebSocket standard
  */
 export interface WsWebSocket extends EventEmitter {
@@ -28,8 +28,7 @@ export class WebSocket extends Transport {
   /**
    * WebSocket transport
    *
-   * @param req
-   * @api public
+   * @param {EngineRequest} req
    */
   constructor(req: {websocket: WsWebSocket}) {
     super(req);
@@ -47,8 +46,6 @@ export class WebSocket extends Transport {
 
   /**
    * Transport name
-   *
-   * @api public
    */
   get name() {
     return "websocket";
@@ -56,8 +53,6 @@ export class WebSocket extends Transport {
 
   /**
    * Advertise upgrade support.
-   *
-   * @api public
    */
   get handlesUpgrades() {
     return true;

@@ -147,7 +147,7 @@ export class Socket extends EventEmitter {
    * Called upon transport packet.
    *
    * @param {Object} packet
-   * @api private
+   * @private
    */
   private onPacket(packet: Packet) {
     if ("open" !== this.readyState) {
