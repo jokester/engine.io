@@ -1,10 +1,10 @@
 import { EventEmitter } from "events";
 import debugModule from "debug";
 import { IncomingMessage } from "http";
-import { Transport } from "./transport";
-import { Server } from "./server";
+import type { Transport } from "./transport";
+import type { BaseServer as Server } from "./server";
 import { setTimeout, clearTimeout } from "timers";
-import { Packet, PacketType, RawData } from "engine.io-parser";
+import type { Packet, PacketType, RawData } from "engine.io-parser/lib";
 
 const debug = debugModule("engine:socket");
 
@@ -14,21 +14,46 @@ export interface SendOptions {
 
 type ReadyState = "opening" | "open" | "closing" | "closed";
 
+type SendCallback = (transport: Transport) => void;
+
 export class Socket extends EventEmitter {
+  /**
+   * The revision of the protocol:
+   *
+   * - 3rd is used in Engine.IO v3 / Socket.IO v2
+   * - 4th is used in Engine.IO v4 and above / Socket.IO v3 and above
+   *
+   * It is found in the `EIO` query parameters of the HTTP requests.
+   *
+   * @see https://github.com/socketio/engine.io-protocol
+   */
   public readonly protocol: number;
-  // TODO for the next major release: do not keep the reference to the first HTTP request, as it stays in memory
+  /**
+   * A reference to the first HTTP request of the session
+   *
+   * TODO for the next major release: remove it
+   */
   public request: IncomingMessage;
+  /**
+   * The IP address of the client.
+   */
   public readonly remoteAddress: string;
 
+  /**
+   * The current state of the socket.
+   */
   public _readyState: ReadyState = "opening";
+  /**
+   * The current low-level transport.
+   */
   public transport: Transport;
 
-  private server: Server;
-  private upgrading = false;
-  private upgraded = false;
+  private server: BaseServer;
+  /* private */ upgrading = false;
+  /* private */ upgraded = false;
   private writeBuffer: Packet[] = [];
-  private packetsFn: Array<() => void> = [];
-  private sentCallbackFn: any[] = [];
+  private packetsFn: SendCallback[] = [];
+  private sentCallbackFn: SendCallback[][] = [];
   private cleanupFn: any[] = [];
   private pingTimeoutTimer;
   private pingIntervalTimer;
@@ -50,12 +75,13 @@ export class Socket extends EventEmitter {
     this._readyState = state;
   }
 
-  /**
-   * Client class (abstract).
-   *
-   * @api private
-   */
-  constructor(id, server, transport, req, protocol) {
+  constructor(
+    id: string,
+    server: BaseServer,
+    transport: Transport,
+    req: EngineRequest,
+    protocol: number
+  ) {
     super();
     this.id = id;
     this.server = server;
@@ -84,7 +110,7 @@ export class Socket extends EventEmitter {
   /**
    * Called upon transport considered open.
    *
-   * @api private
+   * @private
    */
   private onOpen() {
     this.readyState = "open";
@@ -110,9 +136,7 @@ export class Socket extends EventEmitter {
 
     if (this.protocol === 3) {
       // in protocol v3, the client sends a ping, and the server answers with a pong
-      this.resetPingTimeout(
-        this.server.opts.pingInterval + this.server.opts.pingTimeout
-      );
+      this.resetPingTimeout();
     } else {
       // in protocol v4, the server sends a ping, and the client answers with a pong
       this.schedulePing();
@@ -123,7 +147,7 @@ export class Socket extends EventEmitter {
    * Called upon transport packet.
    *
    * @param {Object} packet
-   * @api private
+   * @private
    */
   private onPacket(packet: Packet) {
     if ("open" !== this.readyState) {
@@ -215,10 +239,10 @@ export class Socket extends EventEmitter {
   /**
    * Attaches handlers for the given transport.
    *
-   * @param {Transport} transport
+   * @param transport
    * @api private
    */
-  private setTransport(transport) {
+  private setTransport(transport: Transport): void {
     const onError = this.onError.bind(this);
     const onPacket = this.onPacket.bind(this);
     const flush = this.flush.bind(this);
@@ -527,9 +551,7 @@ export class Socket extends EventEmitter {
   private getAvailableUpgrades() {
     const availableUpgrades = [];
     const allUpgrades = this.server.upgrades(this.transport.name);
-    let i = 0;
-    const l = allUpgrades.length;
-    for (; i < l; ++i) {
+    for (let i = 0; i < allUpgrades.length; ++i) {
       const upg = allUpgrades[i];
       if (this.server.opts.transports.indexOf(upg) !== -1) {
         availableUpgrades.push(upg);

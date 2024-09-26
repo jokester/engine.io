@@ -15,14 +15,20 @@ import type {
 import type { CookieSerializeOptions } from "cookie";
 import type { CorsOptions, CorsOptionsDelegate } from "cors";
 import type { Duplex } from "stream";
+import type * as T from './transports'
 import { WebTransport } from "./transports/webtransport";
-import { createPacketDecoderStream } from "engine.io-parser";
+import { createPacketDecoderStream } from "engine.io-parser/lib";
 
 const debug = debugModule("engine");
 
 const kResponseHeaders = Symbol("responseHeaders");
 
 type Transport = "polling" | "websocket";
+
+export type ErrorCallback = (
+  errorCode?: typeof Server.errors[keyof typeof Server.errors],
+  errorContext?: Record<string, unknown> & {name?: string, message?: string}
+) => void;
 
 export interface AttachOptions {
   /**
@@ -112,7 +118,7 @@ export interface ServerOptions {
    *
    * @default `require("ws").Server`
    */
-  wsEngine?: any;
+  wsEngine?: typeof import('ws').Server;
   /**
    * an optional packet which will be concatenated to the handshake packet emitted by Engine.IO.
    */
@@ -148,7 +154,7 @@ type Middleware = (
   next: (err?: any) => void
 ) => void;
 
-function parseSessionId(data: string) {
+function parseSessionId(data: string): string | undefined {
   try {
     const parsed = JSON.parse(data);
     if (typeof parsed.sid === "string") {
@@ -160,7 +166,8 @@ function parseSessionId(data: string) {
 export abstract class BaseServer extends EventEmitter {
   public opts: ServerOptions;
 
-  protected clients: any;
+  // TODO for the next major release: use a Map instead
+  protected clients: Record<string, Socket>;
   public clientsCount: number;
   protected middlewares: Middleware[] = [];
 
@@ -168,7 +175,6 @@ export abstract class BaseServer extends EventEmitter {
    * Server constructor.
    *
    * @param {Object} opts - options
-   * @api public
    */
   constructor(opts: ServerOptions = {}) {
     super();
@@ -223,7 +229,7 @@ export abstract class BaseServer extends EventEmitter {
     this.init();
   }
 
-  protected abstract init();
+  protected abstract init(): void;
 
   /**
    * Compute the pathname of the requests that are handled by the server
@@ -245,9 +251,8 @@ export abstract class BaseServer extends EventEmitter {
    * Returns a list of available transports for upgrade given a certain transport.
    *
    * @return {Array}
-   * @api public
    */
-  public upgrades(transport) {
+  public upgrades(transport: keyof typeof transports) {
     if (!this.opts.allowUpgrades) return [];
     return transports[transport].upgradesTo || [];
   }
@@ -255,16 +260,18 @@ export abstract class BaseServer extends EventEmitter {
   /**
    * Verifies a request.
    *
-   * @param {http.IncomingMessage}
-   * @return {Boolean} whether the request is valid
-   * @api private
+   * @param {EngineRequest} req
+   * @param upgrade - whether it's an upgrade request
+   * @param fn
+   * @protected
+   * @return whether the request is valid
    */
-  protected verify(req, upgrade, fn) {
+  protected verify(req: EngineRequest, upgrade: boolean, fn: ErrorCallback): void | boolean {
     // transport check
     const transport = req._query.transport;
     // WebTransport does not go through the verify() method, see the onWebTransportSession() method
     if (
-      !~this.opts.transports.indexOf(transport) ||
+      !~this.opts.transports.indexOf(transport as Transport) ||
       transport === "webtransport"
     ) {
       debug('unknown transport "%s"', transport);
@@ -292,7 +299,7 @@ export abstract class BaseServer extends EventEmitter {
           sid,
         });
       }
-      const previousTransport = this.clients[sid].transport.name;
+      const previousTransport = this.clients[sid as string].transport.name;
       if (!upgrade && previousTransport !== transport) {
         debug("bad request: unexpected transport without upgrade");
         return fn(Server.errors.BAD_REQUEST, {
@@ -383,8 +390,6 @@ export abstract class BaseServer extends EventEmitter {
 
   /**
    * Closes all clients.
-   *
-   * @api public
    */
   public close() {
     debug("closing all open clients");
@@ -403,23 +408,22 @@ export abstract class BaseServer extends EventEmitter {
    * generate a socket id.
    * Overwrite this method to generate your custom socket id
    *
-   * @param {Object} request object
-   * @api public
+   * @param {IncomingMessage} req - the request object
    */
-  public generateId(req) {
+  public generateId(req: IncomingMessage): string | PromiseLike<string> {
     return base64id.generateId();
   }
 
   /**
-   * Handshakes a new client.
+   * Handshakes a new client. create new sessionId / Socket / more
    *
-   * @param {String} transport name
-   * @param {Object} request object
+   * @param {String} transportName
+   * @param {Object} req - the request object
    * @param {Function} closeConnection
    *
-   * @api protected
+   * @protected
    */
-  protected async handshake(transportName, req, closeConnection) {
+  protected async handshake(transportName: string, req: PreparedIncomingMessage, closeConnection: ErrorCallback) {
     const protocol = req._query.EIO === "4" ? 4 : 3; // 3rd revision by default
     if (protocol === 3 && !this.opts.allowEIO3) {
       debug("unsupported protocol version");
@@ -440,7 +444,7 @@ export abstract class BaseServer extends EventEmitter {
     try {
       id = await this.generateId(req);
     } catch (e) {
-      debug("error while generating an id");
+      debug("error while generating an id", e);
       this.emit("connection_error", {
         req,
         code: Server.errors.BAD_REQUEST,
@@ -456,16 +460,17 @@ export abstract class BaseServer extends EventEmitter {
 
     debug('handshaking client "%s"', id);
 
+    let transport: T.TransportImpl;
     try {
-      var transport = this.createTransport(transportName, req);
+      transport = this.createTransport(transportName, req);
       if ("polling" === transportName) {
-        transport.maxHttpBufferSize = this.opts.maxHttpBufferSize;
-        transport.httpCompression = this.opts.httpCompression;
+        (transport as T.XHR).maxHttpBufferSize = this.opts.maxHttpBufferSize;
+        (transport as T.XHR).httpCompression = this.opts.httpCompression;
       } else if ("websocket" === transportName) {
-        transport.perMessageDeflate = this.opts.perMessageDeflate;
+        (transport as T.WebSocket).perMessageDeflate = this.opts.perMessageDeflate;
       }
     } catch (e) {
-      debug('error handshaking to transport "%s"', transportName);
+      debug('error handshaking to transport "%s"', transportName, e);
       this.emit("connection_error", {
         req,
         code: Server.errors.BAD_REQUEST,
@@ -594,7 +599,7 @@ export abstract class BaseServer extends EventEmitter {
     }
   }
 
-  protected abstract createTransport(transportName, req);
+  protected abstract createTransport(transportName, req): T.TransportImpl;
 
   /**
    * Protocol errors mappings.
@@ -607,7 +612,7 @@ export abstract class BaseServer extends EventEmitter {
     BAD_REQUEST: 3,
     FORBIDDEN: 4,
     UNSUPPORTED_PROTOCOL_VERSION: 5,
-  };
+  } as const;
 
   static errorMessages = {
     0: "Transport unknown",
@@ -616,7 +621,7 @@ export abstract class BaseServer extends EventEmitter {
     3: "Bad request",
     4: "Forbidden",
     5: "Unsupported protocol version",
-  };
+  } as const;
 }
 
 /**
@@ -655,12 +660,12 @@ class WebSocketResponse {
 
 export class Server extends BaseServer {
   public httpServer?: HttpServer;
-  private ws: any;
+  private ws: import('ws').Server;
 
   /**
    * Initialize websocket server
    *
-   * @api protected
+   * @protected
    */
   protected init() {
     if (!~this.opts.transports.indexOf("websocket")) return;
@@ -707,33 +712,33 @@ export class Server extends BaseServer {
   /**
    * Prepares a request by processing the query string.
    *
-   * @api private
+   * @private
    */
-  private prepare(req) {
+  private prepare(req: EngineRequest) {
     // try to leverage pre-existing `req._query` (e.g: from connect)
     if (!req._query) {
-      req._query = ~req.url.indexOf("?") ? qs.parse(parse(req.url).query) : {};
+      req._query = (
+        ~req.url.indexOf("?") ? qs.parse(parse(req.url).query) : {}
+      ) as Record<string, string>;
     }
   }
 
-  protected createTransport(transportName, req) {
-    return new transports[transportName](req);
+  protected createTransport(transportName: keyof typeof transports, req: EngineRequest): T.TransportImpl {
+    return new transports[transportName](req) as T.TransportImpl
   }
 
   /**
    * Handles an Engine.IO HTTP request.
    *
-   * @param {IncomingMessage} req
+   * @param {EngineRequest} req
    * @param {ServerResponse} res
-   * @api public
    */
-  public handleRequest(req: IncomingMessage, res: ServerResponse) {
+  public handleRequest(req: EngineRequest, res: ServerResponse) {
     debug('handling "%s" http request "%s"', req.method, req.url);
     this.prepare(req);
-    // @ts-ignore
     req.res = res;
 
-    const callback = (errorCode, errorContext) => {
+    const callback: ErrorCallback = (errorCode, errorContext) => {
       if (errorCode !== undefined) {
         this.emit("connection_error", {
           req,
@@ -745,15 +750,12 @@ export class Server extends BaseServer {
         return;
       }
 
-      // @ts-ignore
       if (req._query.sid) {
         debug("setting new request for existing client");
-        // @ts-ignore
         this.clients[req._query.sid].transport.onRequest(req);
       } else {
         const closeConnection = (errorCode, errorContext) =>
           abortRequest(res, errorCode, errorContext);
-        // @ts-ignore
         this.handshake(req._query.transport, req, closeConnection);
       }
     };
@@ -769,18 +771,16 @@ export class Server extends BaseServer {
 
   /**
    * Handles an Engine.IO HTTP Upgrade.
-   *
-   * @api public
    */
   public handleUpgrade(
-    req: IncomingMessage,
+    req: EngineRequest,
     socket: Duplex,
     upgradeHead: Buffer
   ) {
     this.prepare(req);
 
     const res = new WebSocketResponse(req, socket);
-    const callback = (errorCode, errorContext) => {
+    const callback: ErrorCallback = (errorCode, errorContext) => {
       if (errorCode !== undefined) {
         this.emit("connection_error", {
           req,
@@ -818,7 +818,7 @@ export class Server extends BaseServer {
    * Called upon a ws.io connection.
    *
    * @param {ws.Socket} websocket
-   * @api private
+   * @private
    */
   private onWebSocket(req, socket, websocket) {
     websocket.on("error", onUpgradeError);
@@ -856,7 +856,9 @@ export class Server extends BaseServer {
         websocket.removeListener("error", onUpgradeError);
 
         const transport = this.createTransport(req._query.transport, req);
+        // @ts-expect-error this option is only for WebSocket impl
         transport.perMessageDeflate = this.opts.perMessageDeflate;
+        // @ts-expect-error
         client.maybeUpgrade(transport);
       }
     } else {
@@ -876,7 +878,6 @@ export class Server extends BaseServer {
    *
    * @param {http.Server} server
    * @param {Object} options
-   * @api public
    */
   public attach(server: HttpServer, options: AttachOptions = {}) {
     const path = this._computePath(options);
@@ -897,7 +898,7 @@ export class Server extends BaseServer {
     server.on("request", (req, res) => {
       if (check(req)) {
         debug('intercepting request for path "%s"', path);
-        this.handleRequest(req, res);
+        this.handleRequest(req as EngineRequest, res);
       } else {
         let i = 0;
         const l = listeners.length;
@@ -910,7 +911,7 @@ export class Server extends BaseServer {
     if (~this.opts.transports.indexOf("websocket")) {
       server.on("upgrade", (req, socket, head) => {
         if (check(req)) {
-          this.handleUpgrade(req, socket, head);
+          this.handleUpgrade(req as EngineRequest, socket, head);
         } else if (false !== options.destroyUpgrade) {
           // default node behavior is to disconnect when no handlers
           // but by adding a handler, we prevent that
@@ -938,10 +939,10 @@ export class Server extends BaseServer {
  * @param errorCode - the error code
  * @param errorContext - additional error context
  *
- * @api private
+ * @private
  */
 
-function abortRequest(res, errorCode, errorContext) {
+function abortRequest(res: ServerResponse, errorCode: number, errorContext?: {message?: string}) {
   const statusCode = errorCode === Server.errors.FORBIDDEN ? 403 : 400;
   const message =
     errorContext && errorContext.message
@@ -963,7 +964,6 @@ function abortRequest(res, errorCode, errorContext) {
  * @param {net.Socket} socket
  * @param {string} errorCode - the error code
  * @param {object} errorContext - additional error context
- *
  * @api private
  */
 
@@ -1026,7 +1026,7 @@ const validHdrChars = [
   1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1  // ... 255
 ]
 
-function checkInvalidHeaderChar(val) {
+function checkInvalidHeaderChar(val: string) {
   val += "";
   if (val.length < 1) return false;
   if (!validHdrChars[val.charCodeAt(0)]) {
